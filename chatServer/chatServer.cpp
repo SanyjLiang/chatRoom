@@ -134,5 +134,117 @@ void chatServer::run()
 //处理客户端消息的函数定义
 void chatServer::handleClient(int client_fd,struct sockaddr_in cin)
 {
+    //定义一个消息类型的变量，用于接收客户端消息
+    MSG msg;        //处理后的消息形态
+    char buffer[sizeof(MSG)];       //杠接收到的消息形态
 
+    //循环接收客户端消息
+    while(true)
+    {
+        //读取客户端消息
+        int recv_len=recv(client_fd,buffer,sizeof(buffer),0);
+
+        //当客户端下线或者recv函数错误
+        if(recv_len<=0)
+        {
+            //表示客户端下线
+            //遍历客户端容器
+            auto it=clients.begin();    //定义遍历客户端容器的迭代器
+            while(it!=clients.end())
+            {
+                if(it->fd==client_fd)   //在容器中找到当前套接字
+                {
+                    clients.erase(it);  //将当前套接字从列表中移除
+                    break;
+                }
+                ++it;   //指针向后偏移
+            }
+            close(client_fd);   //关闭套接字
+            break;
+        }
+
+        //程序执行至此，表示收到某个客户端消息，需要进行反序列化
+        msg.deseralize(string(buffer,recv_len));
+
+        //对消息类型进行判断
+        switch(ntohl(msg.type))
+        {
+            case LOGIN:
+            {
+                //表示客户端发的是登录消息
+                //定义一个互斥锁，保护客户端容器
+                unique_lock<mutex> lock(client_mutex);
+                Client new_client;
+                //将新客户端的相关信息获取下来
+                new_client.fd=client_fd;
+                new_client.cin=cin;
+
+                //将新客户端放入客户端容器中
+                clients.push_back(new_client);
+
+                //组装一条消息，广播给所有客户端
+                sprintf(msg.text,"-----%s 登录成功 -----",msg.name);
+                broadcast(msg);     //告诉所有用户，包括自己，该用户登录成功
+                break;
+            }
+
+            case CHAT:
+            {
+                //表示客户端发的是聊天消息
+                //定义一个互斥锁，保护客户端容器
+                unique_lock<mutex> lock(client_mutex);
+                broadcast(msg,client_fd);       //除了自己，将消息转发给其他所有人
+
+                break;
+            }
+
+            case QUIT:
+            {
+                //表示客户端发的是退出消息
+                //定义一个互斥锁，保护客户端容器
+                unique_lock<mutex>lock(client_mutex);
+                auto it=clients.begin();    //定义迭代器，遍历客户端容器
+                while(it!=clients.end())
+                {
+                    if(it->fd==client_fd)
+                    {
+                        clients.erase(it);      //将当前用户清除容器
+                        break;
+                    }
+
+                    ++it;       //继续遍历下一个
+                }
+
+                //将消息广播给所有人
+                sprintf(msg.text,"--------%s 退出聊天室 -------",msg.name);
+                broadcast(msg);
+                close(client_fd);   //关闭当前客户端套接字
+                break;
+            }
+
+            default:
+                cout<<"消息类型有误"<<endl;
+                break;
+        }
+    }
+}
+
+//定义广播函数
+void chatServer::broadcast(const MSG&msg,int exclude_fd)
+{
+    //将要广播的消息进行序列化操作，转化成字符串
+    string data = msg.serialize();
+
+    //将字符串转发给所有客户端
+    for(const auto&client:clients)
+    {
+        if(client.fd!=exclude_fd)
+        {
+            if(send(client.fd,data.c_str(),data.size(),0)<0)
+            {
+                perror("send error");
+                return ;
+            }
+        }
+    }
 }
