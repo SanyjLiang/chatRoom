@@ -53,7 +53,7 @@ private:
 
     void errLog(const char*msg);    //错误日志函数
     void sendMsg(int type,const string &text="");   //发送消息函数
-    void recvMsg();             //接收消息函数
+    void recvMsg();           //接收消息函数
 
 public:
     ChatClient(const char*ip,int port,const string &name); //有参构造
