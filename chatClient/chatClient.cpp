@@ -1,7 +1,7 @@
 #include "chatClient.h"
 
 //构造函数的定义
- ChatClient::ChatClient(const char*ip,int port,const string &name)
+ ChatClient::ChatClient(const char*ip,int port,const string &name):name(name),running(true)
  {
     //创建客户端套接字
     cfd=socket(AF_INET,SOCK_STREAM,0);
@@ -104,17 +104,38 @@ void ChatClient::recvMsg()
     while(running)
     {
         //非阻塞接收客户端消息
-        int recv_len=recv(cfd,buffer,sizeof(buffer),0);
-        if(recv_len<=0)
+        int recv_len=recv(cfd,buffer,sizeof(buffer),MSG_DONTWAIT);
+        if(recv_len<0)
         {
+            if(errno==EAGAIN)
+            {
+                //休眠100s
+                usleep(100000);
+            }
+            else
+            {
+                //错误
+                errLog("recv error");
+                running = false;
+                break;
+            }
+            
+        }
+        else if(recv_len==0)
+        {
+            //错误
             errLog("recv error");
             running = false;
-            break;
+            break;      //连接关闭
         }
-
-        //将消息进行解析
+        else
+        {
+             //将消息进行解析
         MSG msg;
         msg.deseralize(string(buffer,recv_len));       //反序列化
         cout<<msg.name<<": "<<msg.text<<endl;
+        }
+
+       
     }
 }    
