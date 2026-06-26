@@ -10,7 +10,7 @@ int main(int argc,const char*argv[])
     }
 
     //实例化一个客户端
-    ChatClient client(argv[1],atoi(argv[2]),argv[4]);
+    ChatClient client(argv[1],atoi(argv[2]),argv[3]);
 
     //运行客户端
     client.run();
